@@ -1,0 +1,155 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Canvas绘图与动画基础</title>
+    <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+</head>
+<body>
+<style>
+    #canvas{
+        border: 1px solid #aaa;
+        text-align: center;
+    }
+</style>
+<div>
+  <button id="randomMapBtn">随机地图</button>
+  <button id="randomMoto">随机车辆</button>
+</div>
+<div>
+  <canvas id="canvas" width="1280" height="600">
+    当用户浏览器不支持Canvas,请更换浏览器重试！
+  </canvas>
+</div>
+<script>
+  var keypoints
+  var motos
+  var currentPosition 
+  var selectedMoto
+  var selectedPath
+  $("#randomMapBtn").click(function() {
+    // console.log("click");
+    keypoints = null
+    motos = null
+    currentPosition = null
+    selectedMoto = null
+    selectedPath = null
+    $.getJSON('http://localhost:9000/api/randomMap', function(data, status) {
+      console.log(data);
+      keypoints = data;
+      // console.log(waitDrawHashSet);
+      drawMap();
+    });
+  });
+
+  $("#randomMoto").click(function() {
+    $.getJSON('http://localhost:9000/api/randomMotos', function(data, status) {
+      // console.log(data);
+      motos = data;
+      drawMap();
+    });
+  });
+
+  const canvas = document.querySelector('canvas')
+  canvas.addEventListener('mousedown', function(e) {
+    getCursorPosition(canvas, e)
+  })
+
+  function getCursorPosition(canvas, event) {
+    const rect = canvas.getBoundingClientRect()
+    const x = event.clientX - rect.left
+    const y = event.clientY - rect.top
+    currentPosition = {x: x, y: y}
+    console.log(currentPosition)
+
+    $.getJSON('http://localhost:9000/api/findNearestMoto', currentPosition, function(data, status) {
+      console.log(data);
+      selectedMoto = data.moto
+      selectedPath = data.path
+      drawMap();
+    });
+
+    drawMap()
+  }
+
+  function textPoint(context, p) {
+    context.fillStyle = "red";
+    context.fillText(""+parseInt(p.x)+","+parseInt(p.y), p.x+4, p.y-4);
+  }
+
+  function drawMap() {
+    var waitDrawHashSet = {};
+    for (const keypoint of keypoints) {
+      waitDrawHashSet[keypoint.id] = keypoint;
+    }
+
+    console.log("begin drawMap")
+    var canvas = document.getElementById("canvas");
+    var context = canvas.getContext("2d");
+    context.clearRect(0, 0, canvas.width, canvas.height);
+
+    for (const keypoint of keypoints) {
+      // console.log("from ", keypoint)
+      // 查找 friends， 并与 friends 画线
+      var friendIDs = keypoint['friendsIDs']
+      // console.log("friendIDs ", friendIDs)
+      for (const friendID of friendIDs) {
+        // console.log("to id: ", friendID)
+        var friendKeyPoint = waitDrawHashSet[friendID]
+        if(friendKeyPoint) {
+          // console.log("to kp: ", friendKeyPoint)
+          // drawLine keypoint ~ friendKeypoint 
+          context.beginPath();
+          context.moveTo(keypoint.point.x, keypoint.point.y);
+          context.lineTo(friendKeyPoint.point.x, friendKeyPoint.point.y);
+          context.strokeStyle = "black";
+          context.lineWidth = 5;
+          context.stroke();
+          context.closePath();
+        }
+      }
+
+      textPoint(context, keypoint.point)
+
+      // 删掉当前点
+      delete waitDrawHashSet[keypoint['id']]
+    }
+
+    console.log("end drawMap")
+
+    if (motos) {
+      for (const moto of motos) {
+        context.fillStyle = "red"
+        width = 7
+        context.fillRect(moto.point.x - width, moto.point.y - width, 2*width, 2*width);
+        textPoint(context, moto.point)
+      }
+    }
+
+    if (currentPosition) {
+      context.fillStyle = "blue"
+      width = 5
+      context.fillRect(currentPosition.x - width, currentPosition.y - width, 2*width, 2*width); 
+      textPoint(context, currentPosition)
+    }
+
+    if (selectedMoto) {
+      context.fillStyle = "blue"
+      width = 5
+      context.fillRect(selectedMoto.point.x - width, selectedMoto.point.y - width, 2*width, 2*width);  
+      context.beginPath();
+      context.moveTo(selectedMoto.point.x, selectedMoto.point.y);
+      if (selectedPath) {
+        for (const p of selectedPath) {
+          context.lineTo(p.point.x, p.point.y);
+        }
+      }
+      context.lineTo(currentPosition.x, currentPosition.y);
+      context.strokeStyle = "green";
+      context.lineWidth = 13;
+      context.stroke(); 
+      context.closePath();
+    }
+  }
+</script>
+</body>
+</html>
